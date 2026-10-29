@@ -5,8 +5,9 @@ from telegram.ext import (
     ContextTypes, MessageHandler, filters
 )
 
+# Токен берется из переменных окружения Render
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
-ADMIN_USERNAME = "@kospium"  # Сюда будут приходить заявки
+ADMIN_USERNAME = "@kospium"  # Куда приходят заявки
 
 # --- УСЛУГИ И ЦЕНЫ ---
 SERVICES = {
@@ -68,7 +69,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["service"] = service_key
         service_name = SERVICES[service_key]["name"]
         await query.edit_message_text(
-            f"Вы выбрали: {service_name}\n\nНапишите удобный день и время (например: 'Завтра в 15:00' или 'В субботу утром'):"
+            f"Вы выбрали: {service_name}\n\nНапишите удобный день и время (например: 'Завтра в 15:00'):"
         )
         
     elif query.data == "back_to_menu":
@@ -81,7 +82,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = context.user_data
     
-    # Если пользователь в процессе записи (выбрал услугу, но не ввел время)
+    # Если пользователь выбрал услугу, но не ввел время
     if "service" in user_data and "time" not in user_data:
         user_data["time"] = update.message.text
         await update.message.reply_text("Напишите ваше имя:")
@@ -89,12 +90,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Если пользователь ввел время, но не ввел имя
     elif "service" in user_data and "time" in user_data and "name" not in user_data:
         user_data["name"] = update.message.text
-        user_data["user_id"] = update.effective_user.id
         user_data["username"] = update.effective_user.username or "нет username"
         
         service_name = SERVICES[user_data["service"]]["name"]
         
-        # Отправляем заявку вам
+        # Отправляем заявку администратору
         try:
             await context.bot.send_message(
                 chat_id=ADMIN_USERNAME,
@@ -108,9 +108,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Спасибо, {user_data['name']}! Ваша заявка принята.\nМы свяжемся с вами для подтверждения.",
                 reply_markup=get_main_menu()
             )
-        except Exception as e:
+        except Exception:
             await update.message.reply_text(
-                "Произошла ошибка при отправке заявки. Пожалуйста, напишите нам напрямую: @kospium"
+                "Произошла ошибка при отправке заявки. Напишите нам напрямую: @kospium"
             )
         
         # Очищаем данные пользователя после записи
