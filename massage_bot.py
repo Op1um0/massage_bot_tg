@@ -5,10 +5,12 @@ from telegram.ext import (
     ContextTypes, MessageHandler, filters
 )
 
+# --- НАСТРОЙКИ ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
-ADMIN_USERNAME = "@kospium"
+ADMIN_USERNAME = "@kospium"  # Сюда приходят заявки
+PHONE_NUMBER = "+7 (XXX) XXX-XX-XX"  # Впишите свой номер для оплаты
 
-# --- ОПИСАНИЯ ---
+# --- ОПИСАНИЯ УСЛУГ ---
 INFO_LFC = "ЛФК — это индивидуально подобранные упражнения для решения задач здоровья и качества жизни."
 INFO_MASSAGE = "Массаж по индивидуальной потребности: расслабляющий, коррекция фигуры (антицеллюлитный, лимфодренажный), спортивный. Зоны массажа подбираются под ваши цели."
 INFO_NUTRITION = "Индивидуальный план питания на 1 месяц.\n\nЧтобы получить план, заполните анкету питания. После заполнения мы свяжемся с вами для уточнения деталей и оплаты."
@@ -85,26 +87,39 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_booking_menu()
         )
         
+    # --- ИНФОРМАЦИЯ ОБ УСЛУГАХ (Цена и время вверху) ---
     elif query.data == "info_lfc":
-        await query.edit_message_text(INFO_LFC, reply_markup=get_services_menu())
+        text = (
+            "🏋️ ЛФК (45-60 мин)\n"
+            "💰 Цена: 2000 руб.\n\n"
+            f"{INFO_LFC}"
+        )
+        await query.edit_message_text(text, reply_markup=get_services_menu())
         
     elif query.data == "info_massage":
-        await query.edit_message_text(INFO_MASSAGE, reply_markup=get_services_menu())
+        text = (
+            "💆 Массаж (60 мин)\n"
+            "💰 Цена: 3000 руб.\n\n"
+            f"{INFO_MASSAGE}"
+        )
+        await query.edit_message_text(text, reply_markup=get_services_menu())
         
     elif query.data == "info_package":
-        await query.edit_message_text(
-            "Пакет ЛФК + Массаж + Питание на месяц:\n"
-            "12 занятий ЛФК + 4 массажа + индивидуальный план питания.\n"
-            "Стоимость: 32 400 руб. (скидка 10%).",
-            reply_markup=get_services_menu()
+        text = (
+            "📦 Пакет ЛФК + Массаж + Питание (месяц)\n"
+            "💰 Цена: 32 400 руб. (-10%)\n"
+            "⏱ Состав: 12 занятий ЛФК + 4 массажа + план питания.\n\n"
+            "Отличный вариант для комплексного подхода к здоровью!"
         )
+        await query.edit_message_text(text, reply_markup=get_services_menu())
         
     elif query.data == "info_trial":
-        await query.edit_message_text(
-            "Пробное занятие ЛФК + Массаж + тестирование.\n"
-            "Стоимость: 5000 руб.",
-            reply_markup=get_services_menu()
+        text = (
+            "🎯 Пробное занятие ЛФК + Массаж + тестирование\n"
+            "💰 Цена: 5000 руб.\n\n"
+            "Отличная возможность познакомиться с нашим подходом и понять, подходит ли он вам."
         )
+        await query.edit_message_text(text, reply_markup=get_services_menu())
 
     # --- ПИТАНИЕ ---
     elif query.data == "nutrition_info":
@@ -188,8 +203,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 "✅ Спасибо! Ваша анкета принята.\n\n"
                 "ℹ️ Информация в обработке. Обычно это занимает 1-2 дня.\n\n"
-                "💳 Для оплаты переведите сумму на номер:\n"
-                "+7 (XXX) XXX-XX-XX (Сбербанк)\n\n"
+                f"💳 Для оплаты переведите сумму на номер:\n"
+                f"{PHONE_NUMBER} (Сбербанк)\n\n"
                 "🔗 Ссылка на оплату: (в разработке)",
                 reply_markup=get_main_menu()
             )
@@ -218,7 +233,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Ошибка. Напишите нам: @kospium")
         return
 
-    # 3. Запись на услугу (имя, телефон, адрес, время)
+    # 3. Запись на услугу
     if "service" in user_data and "details" not in user_data:
         user_data["details"] = update.message.text
         
