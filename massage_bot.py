@@ -1,4 +1,8 @@
 import os
+import threading
+import time
+import requests
+from flask import Flask
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, CallbackQueryHandler,
@@ -7,10 +11,35 @@ from telegram.ext import (
 
 # --- НАСТРОЙКИ ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
-ADMIN_USERNAME = "@kospium"  # Сюда приходят заявки
-PHONE_NUMBER = "+7 (XXX) XXX-XX-XX"  # Впишите свой номер для оплаты
+ADMIN_USERNAME = "@kospium"
+PHONE_NUMBER = "+7 (XXX) XXX-XX-XX"  # Впишите свой номер
+RENDER_URL = "https://massage-bot-tg.onrender.com"  # URL вашего сервиса на Render
 
-# --- ОПИСАНИЯ УСЛУГ ---
+# --- ВЕБ-СЕРВЕР ДЛЯ RENDER (ЗАГЛУШКА) ---
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Бот работает!"
+
+@app.route('/health')
+def health():
+    return "OK"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
+
+# --- САМОПИНГ (ЧТОБЫ RENDER НЕ УСЫПЛЯЛ БОТА) ---
+def keep_alive():
+    while True:
+        try:
+            requests.get(RENDER_URL, timeout=10)
+        except Exception:
+            pass
+        time.sleep(600)  # Пингуем каждые 10 минут
+
+# --- ОПИСАНИЯ ---
 INFO_LFC = "ЛФК — это индивидуально подобранные упражнения для решения задач здоровья и качества жизни."
 INFO_MASSAGE = "Массаж по индивидуальной потребности: расслабляющий, коррекция фигуры (антицеллюлитный, лимфодренажный), спортивный. Зоны массажа подбираются под ваши цели."
 INFO_NUTRITION = "Индивидуальный план питания на 1 месяц.\n\nЧтобы получить план, заполните анкету питания. После заполнения мы свяжемся с вами для уточнения деталей и оплаты."
@@ -87,7 +116,6 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_booking_menu()
         )
         
-    # --- ИНФОРМАЦИЯ ОБ УСЛУГАХ (Цена и время вверху) ---
     elif query.data == "info_lfc":
         text = (
             "🏋️ ЛФК (45-60 мин)\n"
@@ -121,7 +149,6 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await query.edit_message_text(text, reply_markup=get_services_menu())
 
-    # --- ПИТАНИЕ ---
     elif query.data == "nutrition_info":
         await query.edit_message_text(
             INFO_NUTRITION,
@@ -142,7 +169,6 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         context.user_data["waiting_anketa"] = True
 
-    # --- ПОДАРОК ---
     elif query.data == "gift":
         await query.edit_message_text(
             "🎁 Вы хотите сделать подарок!\n\n"
@@ -154,7 +180,6 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         context.user_data["waiting_gift"] = True
 
-    # --- ЗАПИСЬ НА УСЛУГУ ---
     elif query.data.startswith("book_"):
         service_key = query.data.replace("book_", "")
         context.user_data["service"] = service_key
@@ -188,7 +213,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.effective_user.first_name
     user_username = update.effective_user.username or "нет username"
     
-    # 1. Анкета питания
     if user_data.get("waiting_anketa"):
         user_data["waiting_anketa"] = False
         anketa_text = update.message.text
@@ -212,7 +236,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Ошибка. Напишите нам: @kospium")
         return
 
-    # 2. Подарок
     if user_data.get("waiting_gift"):
         user_data["waiting_gift"] = False
         gift_text = update.message.text
@@ -233,7 +256,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Ошибка. Напишите нам: @kospium")
         return
 
-    # 3. Запись на услугу
     if "service" in user_data and "details" not in user_data:
         user_data["details"] = update.message.text
         
@@ -265,6 +287,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- ЗАПУСК ---
 if __name__ == "__main__":
+    # 1. Запускаем Flask в фоновом потоке (для Render)
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    
+    # 2. Запускаем самопинг в фоновом потоке (чтобы не засыпал)
+    keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+    keep_alive_thread.start()
+    
+    # 3. Запускаем бота в главном потоке
     application = ApplicationBuilder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(handle_button))
