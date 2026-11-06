@@ -16,15 +16,10 @@
 - Render (хостинг)
 
 ## Демо
-Бот доступен в Telegram: [@твой_бот](https://t.me/твой_бот)
+Бот доступен в Telegram: [@xochy_massage_bot](https://t.me/xochy_massage_bot)
 
 ## Скриншоты
-[Вставь сюда 2–3 скриншота: главное меню, выбор услуги, сообщение с заявкой]
 
-## Как запустить локально
-1. Установи зависимости: `pip install -r requirements.txt`
-2. Создай переменную окружения `TELEGRAM_TOKEN` с токеном от @BotFather.
-3. Запусти: `python massage_bot.py`
 
-## Автор
-[Твоё имя / ник на GitHub]
+
+[Константин\Op1um0]
