@@ -235,7 +235,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "🔗 Ссылка на оплату: (в разработке)",
                 reply_markup=get_main_menu()
             )
-        except Exception:
+        except Exception as e:
+            print(f"ОШИБКА ОТПРАВКИ (анкета): {e}")
             await update.message.reply_text("Ошибка. Напишите нам: @kospium")
         return
 
@@ -256,7 +257,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Мы свяжемся с вами для уточнения деталей оплаты.",
                 reply_markup=get_main_menu()
             )
-        except Exception:
+        except Exception as e:
+            print(f"ОШИБКА ОТПРАВКИ (подарок): {e}")
             await update.message.reply_text("Ошибка. Напишите нам: @kospium")
         return
 
@@ -276,7 +278,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "✅ Спасибо! Ваш вопрос передан администратору. Мы ответим вам в ближайшее время.",
                 reply_markup=get_main_menu()
             )
-        except Exception:
+        except Exception as e:
+            print(f"ОШИБКА ОТПРАВКИ (вопрос): {e}")
             await update.message.reply_text("Ошибка. Напишите нам: @kospium")
         return
 
@@ -305,7 +308,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Мы свяжемся с вами для подтверждения.",
                 reply_markup=get_main_menu()
             )
-        except Exception:
+        except Exception as e:
+            print(f"ОШИБКА ОТПРАВКИ (запись): {e}")
             await update.message.reply_text("Ошибка. Напишите нам: @kospium")
         user_data.clear()
 
