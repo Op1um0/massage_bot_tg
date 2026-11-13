@@ -1,21 +1,45 @@
 import os
-import threading
-import time
-import requests
-from flask import Flask
+import sqlite3
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, CallbackQueryHandler,
     ContextTypes, MessageHandler, filters
 )
+from flask import Flask
+import threading
+import requests
+import time
 
 # --- НАСТРОЙКИ ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 ADMIN_USERNAME = "@kospium"
-PHONE_NUMBER = "+7 (XXX) XXX-XX-XX"  # Впишите свой номер
-RENDER_URL = "https://massage-bot-tg.onrender.com"  # URL вашего сервиса на Render
+PHONE_NUMBER = "+7 (989) 633-22-42"
+RENDER_URL = "https://massage-bot-tg.onrender.com"
 
-# --- ВЕБ-СЕРВЕР ДЛЯ RENDER (ЗАГЛУШКА) ---
+# --- БАЗА ДАННЫХ ---
+conn = sqlite3.connect('clients.db', check_same_thread=False)
+cursor = conn.cursor()
+
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        username TEXT,
+        request_type TEXT,
+        details TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+''')
+conn.commit()
+
+def save_request(user_id, username, request_type, details):
+    cursor.execute(
+        'INSERT INTO requests (user_id, username, request_type, details) VALUES (?, ?, ?, ?)',
+        (user_id, username, request_type, details)
+    )
+    conn.commit()
+
+# --- ВЕБ-СЕРВЕР ДЛЯ RENDER ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -30,14 +54,13 @@ def run_flask():
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
 
-# --- САМОПИНГ (ЧТОБЫ RENDER НЕ УСЫПЛЯЛ БОТА) ---
 def keep_alive():
     while True:
         try:
             requests.get(RENDER_URL, timeout=10)
         except Exception:
             pass
-        time.sleep(600)  # Пингуем каждые 10 минут
+        time.sleep(600)
 
 # --- ОПИСАНИЯ ---
 INFO_LFC = "ЛФК — это индивидуально подобранные упражнения для решения задач здоровья и качества жизни."
@@ -51,6 +74,7 @@ def get_main_menu():
         [InlineKeyboardButton("Цены", callback_data="prices")],
         [InlineKeyboardButton("Питание", callback_data="nutrition_info")],
         [InlineKeyboardButton("Записаться", callback_data="booking")],
+        [InlineKeyboardButton("Задать вопрос", callback_data="ask_question")],
         [InlineKeyboardButton("🎁 Сделать подарок", callback_data="gift")]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -95,11 +119,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     if query.data == "services":
-        await query.edit_message_text(
-            "Выберите услугу, чтобы узнать подробнее:",
-            reply_markup=get_services_menu()
-        )
-        
+        await query.edit_message_text("Выберите услугу:", reply_markup=get_services_menu())
     elif query.data == "prices":
         text = (
             "💰 Наши цены:\n\n"
@@ -109,81 +129,66 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• Пробное занятие ЛФК + Массаж + тестирование: 5000 руб."
         )
         await query.edit_message_text(text, reply_markup=get_main_menu())
-        
     elif query.data == "booking":
-        await query.edit_message_text(
-            "Выберите услугу для записи:",
-            reply_markup=get_booking_menu()
-        )
-        
+        await query.edit_message_text("Выберите услугу для записи:", reply_markup=get_booking_menu())
     elif query.data == "info_lfc":
-        text = (
-            "🏋️ ЛФК (45-60 мин)\n"
-            "💰 Цена: 2000 руб.\n\n"
-            f"{INFO_LFC}"
-        )
+        text = f"🏋️ ЛФК (45-60 мин)\n💰 Цена: 2000 руб.\n\n{INFO_LFC}"
         await query.edit_message_text(text, reply_markup=get_services_menu())
-        
     elif query.data == "info_massage":
-        text = (
-            "💆 Массаж (60 мин)\n"
-            "💰 Цена: 3000 руб.\n\n"
-            f"{INFO_MASSAGE}"
-        )
+        text = f"💆 Массаж (60 мин)\n💰 Цена: 3000 руб.\n\n{INFO_MASSAGE}"
         await query.edit_message_text(text, reply_markup=get_services_menu())
-        
     elif query.data == "info_package":
         text = (
             "📦 Пакет ЛФК + Массаж + Питание (месяц)\n"
             "💰 Цена: 32 400 руб. (-10%)\n"
-            "⏱ Состав: 12 занятий ЛФК + 4 массажа + план питания.\n\n"
-            "Отличный вариант для комплексного подхода к здоровью!"
+            "⏱ Состав: 12 занятий ЛФК + 4 массажа + план питания."
         )
         await query.edit_message_text(text, reply_markup=get_services_menu())
-        
     elif query.data == "info_trial":
         text = (
             "🎯 Пробное занятие ЛФК + Массаж + тестирование\n"
             "💰 Цена: 5000 руб.\n\n"
-            "Отличная возможность познакомиться с нашим подходом и понять, подходит ли он вам."
+            "Отличная возможность познакомиться с нашим подходом."
         )
         await query.edit_message_text(text, reply_markup=get_services_menu())
-
     elif query.data == "nutrition_info":
-        await query.edit_message_text(
-            INFO_NUTRITION,
-            reply_markup=get_nutrition_menu()
-        )
-
+        await query.edit_message_text(INFO_NUTRITION, reply_markup=get_nutrition_menu())
     elif query.data == "fill_anketa":
         await query.edit_message_text(
             "📝 Анкета питания\n\n"
             "Пожалуйста, ответьте на следующие вопросы одним сообщением:\n\n"
-            "1. Ваш возраст, рост, вес.\n"
+            "1. Ваш возраст, рост, вес, пол.\n"
             "2. Цель (похудеть, набрать массу, поддерживать).\n"
-            "3. Есть ли аллергии или непереносимость продуктов?\n"
-            "4. Сколько раз в день вы едите?\n"
-            "5. Ваш уровень активности (сидячий, средний, высокий).\n"
-            "6. Что вы обычно едите на завтрак, обед и ужин?\n\n"
+            "3. Есть ли пищевые аллергии?\n"
+            "4. Во сколько подъем, чаще всего?\n"
+            "5. Во сколько отбой, чаще всего?\n"
+            "6. В какое время есть возможность обедать днем: 13, 14, 15, 16ч?\n"
+            "7. Без каких продуктов не можете обойтись?\n"
+            "8. Врачебные ограничения в питании\n"
+            "9. Эндокринные заболевания?\n"
+            "10. Заболевания ЖКТ\n"
+            "11. Сколько выпили чистой воды вчера, приблизительно?\n\n"
             "Напишите все ответы одним сообщением."
         )
         context.user_data["waiting_anketa"] = True
-
     elif query.data == "gift":
         await query.edit_message_text(
             "🎁 Вы хотите сделать подарок!\n\n"
-            "Напишите, пожалуйста, информацию в таком формате (одним сообщением):\n\n"
+            "Напишите информацию одним сообщением:\n\n"
             "1. Имя получателя\n"
             "2. Телефон получателя\n"
-            "3. Адрес, где делать услугу\n"
-            "4. Дополнительная информация (пожелания, нюансы)"
+            "3. Адрес\n"
+            "4. Дополнительная информация"
         )
         context.user_data["waiting_gift"] = True
-
+    elif query.data == "ask_question":
+        await query.edit_message_text(
+            "✍️ Напишите ваш вопрос одним сообщением, и я передам его администратору."
+        )
+        context.user_data["waiting_question"] = True
     elif query.data.startswith("book_"):
         service_key = query.data.replace("book_", "")
         context.user_data["service"] = service_key
-        
         service_names = {
             "lfc": "ЛФК",
             "massage": "Массаж",
@@ -191,32 +196,30 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "trial": "Пробное занятие ЛФК + Массаж"
         }
         service_name = service_names.get(service_key, "Услуга")
-        
         await query.edit_message_text(
             f"Вы выбрали: {service_name}\n\n"
-            "Напишите ваши данные одним сообщением в таком формате:\n\n"
+            "Напишите ваши данные одним сообщением:\n\n"
             "1. Ваше имя\n"
             "2. Ваш телефон\n"
-            "3. Адрес, где нужно провести услугу\n"
-            "4. Удобный день и время"
+            "3. Адрес\n"
+            "4. Удобный день и время\n"
+            "5. Комментарий (пожелания к массажу, если есть)"
         )
-        
     elif query.data == "back_to_menu":
-        await query.edit_message_text(
-            "Главное меню:",
-            reply_markup=get_main_menu()
-        )
+        await query.edit_message_text("Главное меню:", reply_markup=get_main_menu())
 
 # --- ОБРАБОТЧИК ТЕКСТА ---
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = context.user_data
     user_name = update.effective_user.first_name
     user_username = update.effective_user.username or "нет username"
+    user_id = update.effective_user.id
     
+    # 1. Анкета питания
     if user_data.get("waiting_anketa"):
         user_data["waiting_anketa"] = False
         anketa_text = update.message.text
-        
+        save_request(user_id, user_username, "Анкета питания", anketa_text)
         try:
             await context.bot.send_message(
                 chat_id=ADMIN_USERNAME,
@@ -236,10 +239,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Ошибка. Напишите нам: @kospium")
         return
 
+    # 2. Подарок
     if user_data.get("waiting_gift"):
         user_data["waiting_gift"] = False
         gift_text = update.message.text
-        
+        save_request(user_id, user_username, "Подарок", gift_text)
         try:
             await context.bot.send_message(
                 chat_id=ADMIN_USERNAME,
@@ -256,9 +260,30 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Ошибка. Напишите нам: @kospium")
         return
 
+    # 3. Вопрос
+    if user_data.get("waiting_question"):
+        user_data["waiting_question"] = False
+        question_text = update.message.text
+        save_request(user_id, user_username, "Вопрос", question_text)
+        try:
+            await context.bot.send_message(
+                chat_id=ADMIN_USERNAME,
+                text=f"❓ НОВЫЙ ВОПРОС!\n\n"
+                     f"От: {user_name} (@{user_username})\n\n"
+                     f"Вопрос:\n{question_text}"
+            )
+            await update.message.reply_text(
+                "✅ Спасибо! Ваш вопрос передан администратору. Мы ответим вам в ближайшее время.",
+                reply_markup=get_main_menu()
+            )
+        except Exception:
+            await update.message.reply_text("Ошибка. Напишите нам: @kospium")
+        return
+
+    # 4. Запись на услугу
     if "service" in user_data and "details" not in user_data:
         user_data["details"] = update.message.text
-        
+        details = update.message.text
         service_names = {
             "lfc": "ЛФК",
             "massage": "Массаж",
@@ -266,13 +291,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "trial": "Пробное занятие ЛФК + Массаж"
         }
         service_name = service_names.get(user_data["service"], "Услуга")
-        
+        save_request(user_id, user_username, f"Запись: {service_name}", details)
         try:
             await context.bot.send_message(
                 chat_id=ADMIN_USERNAME,
                 text=f"🔔 НОВАЯ ЗАЯВКА!\n\n"
                      f"Услуга: {service_name}\n\n"
-                     f"Данные клиента:\n{user_data['details']}\n\n"
+                     f"Данные клиента:\n{details}\n\n"
                      f"Telegram: @{user_username}"
             )
             await update.message.reply_text(
@@ -282,24 +307,33 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception:
             await update.message.reply_text("Ошибка. Напишите нам: @kospium")
-        
         user_data.clear()
+
+# --- КОМАНДА АДМИНА ---
+async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.username != "kospium":
+        await update.message.reply_text("У вас нет доступа.")
+        return
+    cursor.execute('SELECT id, request_type, details, created_at FROM requests ORDER BY id DESC LIMIT 10')
+    rows = cursor.fetchall()
+    if not rows:
+        await update.message.reply_text("Заявок пока нет.")
+        return
+    text = "📊 Последние 10 заявок:\n\n"
+    for row in rows:
+        text += f"ID: {row[0]}\nТип: {row[1]}\nДетали: {row[2]}\nДата: {row[3]}\n\n"
+    await update.message.reply_text(text)
 
 # --- ЗАПУСК ---
 if __name__ == "__main__":
-    # 1. Запускаем Flask в фоновом потоке (для Render)
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
-    
-    # 2. Запускаем самопинг в фоновом потоке (чтобы не засыпал)
     keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
     keep_alive_thread.start()
-    
-    # 3. Запускаем бота в главном потоке
     application = ApplicationBuilder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("admin", admin))
     application.add_handler(CallbackQueryHandler(handle_button))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    
     print("Бот запускается...")
     application.run_polling()
